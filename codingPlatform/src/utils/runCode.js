@@ -1,25 +1,33 @@
 // utils/runCode.js
-// Shared code execution utility using the Piston API (https://github.com/engineer-man/piston)
-// Used by:
-//   - CodingQuestion.jsx (student "Run" button — just shows raw output, no test cases)
-//   - AdminGradeTheory.jsx ("Run against test cases" — shows pass/fail per test case)
+//
+// Thin wrapper around the Piston public API (https://github.com/engineer-man/piston)
+// used for two things:
+//   1. runCodeOnce      -> student's "Run" button (no grading, just stdout/stderr)
+//   2. runAgainstTestCases -> admin grading, loops through visible + hidden test cases
+//
+// Piston is free and public but rate-limited / best-effort uptime. If that becomes
+// a problem in production, self-host Piston (single Docker container) or swap to
+// Judge0 — only this file needs to change, since every caller goes through the
+// two functions below.
 
-const PISTON_API_URL = 'https://emkc.org/api/v2/piston/execute';
+const PISTON_API_BASE = 'https://emkc.org/api/v2/piston';
 
-// Piston needs an exact runtime version per language. This list is fetched once
-// and cached so we don't hit /runtimes on every single execution.
-let cachedRuntimes = null;
-
-const LANGUAGE_MAP = {
-  javascript: 'javascript',
-  python: 'python',
-  java: 'java',
-  c: 'c',
-  cpp: 'cpp',
+// Maps our internal language keys to what Piston expects (language + version).
+// Piston requires an exact version string per runtime, so we resolve these
+// dynamically from /runtimes on first use instead of hardcoding versions that
+// might go stale.
+const LANGUAGE_CONFIG = {
+  javascript: { piston: 'javascript', alias: ['javascript', 'node', 'nodejs'] },
+  python: { piston: 'python', alias: ['python', 'python3'] },
+  java: { piston: 'java', alias: ['java'] },
+  c: { piston: 'c', alias: ['c'] },
+  cpp: { piston: 'cpp', alias: ['cpp', 'c++'] },
 };
 
-// Piston expects a specific filename per language so it compiles correctly
-const FILENAME_MAP = {
+export const SUPPORTED_LANGUAGES = Object.keys(LANGUAGE_CONFIG);
+
+// File names Piston expects to see per language (matters for Java's public class rule).
+const FILENAME = {
   javascript: 'main.js',
   python: 'main.py',
   java: 'Main.java',
@@ -27,167 +35,178 @@ const FILENAME_MAP = {
   cpp: 'main.cpp',
 };
 
-async function getRuntimeVersion(language) {
-  if (!cachedRuntimes) {
-    const res = await fetch('https://emkc.org/api/v2/piston/runtimes');
-    if (!res.ok) throw new Error('Failed to fetch Piston runtimes');
-    cachedRuntimes = await res.json();
-  }
+const COMPILED_LANGUAGES = new Set(['java', 'c', 'cpp']);
 
-  const pistonLang = LANGUAGE_MAP[language];
-  const runtime = cachedRuntimes.find((r) => r.language === pistonLang);
+// ---- Runtime version cache ------------------------------------------------
+// Piston's /runtimes list changes rarely; fetching it on every single code run
+// would be wasteful. Cache it in memory for the lifetime of the session (tab).
+let runtimesCache = null;
+let runtimesPromise = null;
 
-  if (!runtime) {
-    throw new Error(`Unsupported language: ${language}`);
-  }
+async function getRuntimes() {
+  if (runtimesCache) return runtimesCache;
+  if (runtimesPromise) return runtimesPromise; // avoid duplicate in-flight fetches
 
-  return runtime.version;
+  runtimesPromise = fetch(`${PISTON_API_BASE}/runtimes`)
+    .then((res) => {
+      if (!res.ok) throw new Error(`Failed to fetch Piston runtimes (${res.status})`);
+      return res.json();
+    })
+    .then((runtimes) => {
+      runtimesCache = runtimes;
+      return runtimes;
+    })
+    .finally(() => {
+      runtimesPromise = null;
+    });
+
+  return runtimesPromise;
 }
 
-/**
- * Executes code once against a single stdin input.
- * Returns { stdout, stderr, compileError, timedOut }
- */
-async function executeOnce(code, language, stdin = '') {
-  const pistonLang = LANGUAGE_MAP[language];
-  if (!pistonLang) {
+// Resolves our language key -> { language, version } as Piston expects,
+// picking the latest available version for that runtime.
+async function resolveRuntime(language) {
+  const config = LANGUAGE_CONFIG[language];
+  if (!config) {
     throw new Error(`Unsupported language: ${language}`);
   }
 
-  const version = await getRuntimeVersion(language);
+  const runtimes = await getRuntimes();
+  const match = runtimes.find((rt) => config.alias.includes(rt.language));
 
-  const res = await fetch(PISTON_API_URL, {
+  if (!match) {
+    throw new Error(`Piston has no runtime available for "${language}"`);
+  }
+
+  return { language: match.language, version: match.version };
+}
+
+// ---- Core execute call ------------------------------------------------
+async function executeOnPiston(code, language, stdin = '') {
+  const runtime = await resolveRuntime(language);
+
+  const res = await fetch(`${PISTON_API_BASE}/execute`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      language: pistonLang,
-      version,
-      files: [
-        {
-          name: FILENAME_MAP[language],
-          content: code,
-        },
-      ],
-      stdin,
-      // safety limits — Piston's public API also enforces its own caps
+      language: runtime.language,
+      version: runtime.version,
+      files: [{ name: FILENAME[language], content: code }],
+      stdin: stdin ?? '',
+      // Reasonable safety limits so a bad submission can't hang the request forever
       compile_timeout: 10000,
       run_timeout: 5000,
     }),
   });
 
   if (!res.ok) {
-    throw new Error(`Piston API error: ${res.status}`);
+    if (res.status === 429) {
+      throw new Error('Piston rate limit hit — try again in a moment.');
+    }
+    throw new Error(`Piston execution failed (${res.status})`);
   }
 
-  const data = await res.json();
+  return res.json();
+}
 
-  // Compile step (only present for compiled languages like c/cpp/java)
+// Normalizes a raw Piston response into the shape our UI consumes.
+function normalizeResult(raw) {
+  const compileStep = raw.compile; // present only for compiled languages
+  const runStep = raw.run;
+
   const compileError =
-    data.compile && data.compile.code !== 0 ? data.compile.stderr || data.compile.output : null;
+    compileStep && compileStep.code !== 0 ? compileStep.stderr || compileStep.output || 'Compile error' : null;
 
   return {
-    stdout: data.run?.stdout ?? '',
-    stderr: data.run?.stderr ?? '',
+    stdout: runStep?.stdout ?? '',
+    stderr: runStep?.stderr ?? '',
     compileError,
-    timedOut: data.run?.signal === 'SIGKILL',
-    raw: data,
+    timedOut: runStep?.signal === 'SIGKILL' || compileStep?.signal === 'SIGKILL',
+    exitCode: runStep?.code ?? null,
   };
 }
 
 /**
- * Plain run — student's "Run" button. No test cases, just shows whatever
- * the code prints for a given (optional) stdin. Never reveals pass/fail
- * because the student shouldn't see grading signal before submit.
+ * Student-facing "Run" button. Executes code once against optional custom stdin.
+ * Returns raw stdout/stderr/compileError — no pass/fail, nothing graded.
  *
  * @param {string} code
- * @param {string} language - one of 'javascript' | 'python' | 'java' | 'c' | 'cpp'
- * @param {string} stdin - optional input the student wants to test with
+ * @param {string} language - one of SUPPORTED_LANGUAGES
+ * @param {string} [stdin]
+ * @returns {Promise<{stdout: string, stderr: string, compileError: string|null, timedOut: boolean}>}
  */
 export async function runCodeOnce(code, language, stdin = '') {
   try {
-    const result = await executeOnce(code, language, stdin);
-    return {
-      success: !result.compileError,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      compileError: result.compileError,
-      timedOut: result.timedOut,
-    };
+    const raw = await executeOnPiston(code, language, stdin);
+    return normalizeResult(raw);
   } catch (err) {
     return {
-      success: false,
       stdout: '',
-      stderr: '',
-      compileError: err.message || 'Execution failed',
+      stderr: err.message || 'Failed to run code.',
+      compileError: null,
       timedOut: false,
     };
   }
 }
 
 /**
- * Runs code against a list of test cases and reports pass/fail per case.
- * Used by admin grading (visible + hidden test cases) — never used
- * client-side for students, per the "no scoring before submit" rule.
+ * Admin grading. Runs the submission against every test case (visible + hidden),
+ * comparing trimmed stdout to each expected output. Stops early on a compile
+ * error since compiled languages fail identically for every test case — no
+ * point re-submitting a broken compile N times.
  *
  * @param {string} code
  * @param {string} language
- * @param {Array<{input: string, expectedOutput: string, hidden?: boolean}>} testCases
- * @returns {Promise<{ compileError: string|null, results: Array, passedCount: number, totalCount: number }>}
+ * @param {Array<{input?: string, expectedOutput: string, hidden?: boolean}>} testCases
+ * @returns {Promise<{
+ *   passedCount: number,
+ *   totalCount: number,
+ *   compileError: string|null,
+ *   results: Array<{ passed: boolean, hidden: boolean, stdout: string, stderr: string, expectedOutput: string }>
+ * }>}
  */
-export async function runAgainstTestCases(code, language, testCases = []) {
+export async function runAgainstTestCases(code, language, testCases) {
+  const totalCount = testCases.length;
   const results = [];
+  let passedCount = 0;
   let compileError = null;
 
   for (const tc of testCases) {
+    let raw;
     try {
-      const result = await executeOnce(code, language, tc.input || '');
-
-      if (result.compileError) {
-        // If it doesn't compile, every test case fails the same way — stop early
-        compileError = result.compileError;
-        results.push({
-          input: tc.input,
-          expectedOutput: tc.expectedOutput,
-          actualOutput: '',
-          passed: false,
-          hidden: !!tc.hidden,
-          error: 'Compile error',
-        });
-        break;
-      }
-
-      const actual = (result.stdout || '').trim();
-      const expected = (tc.expectedOutput || '').trim();
-
-      results.push({
-        input: tc.input,
-        expectedOutput: tc.expectedOutput,
-        actualOutput: result.stdout,
-        stderr: result.stderr,
-        passed: actual === expected,
-        hidden: !!tc.hidden,
-        timedOut: result.timedOut,
-      });
+      raw = await executeOnPiston(code, language, tc.input || '');
     } catch (err) {
+      // Network/API failure (e.g. rate limit) — treat as a failed case, not a compile error
       results.push({
-        input: tc.input,
-        expectedOutput: tc.expectedOutput,
-        actualOutput: '',
         passed: false,
         hidden: !!tc.hidden,
-        error: err.message || 'Execution failed',
+        stdout: '',
+        stderr: err.message || 'Execution failed',
+        expectedOutput: tc.expectedOutput,
       });
+      continue;
     }
+
+    const normalized = normalizeResult(raw);
+
+    // Compiled languages (C/C++/Java): a compile error is the same for every
+    // test case, so bail out after the first one instead of wasting calls.
+    if (COMPILED_LANGUAGES.has(language) && normalized.compileError) {
+      compileError = normalized.compileError;
+      break;
+    }
+
+    const passed = normalized.stdout.trim() === (tc.expectedOutput || '').trim();
+    if (passed) passedCount += 1;
+
+    results.push({
+      passed,
+      hidden: !!tc.hidden,
+      stdout: normalized.stdout,
+      stderr: normalized.stderr,
+      expectedOutput: tc.expectedOutput,
+    });
   }
 
-  const passedCount = results.filter((r) => r.passed).length;
-
-  return {
-    compileError,
-    results,
-    passedCount,
-    totalCount: testCases.length,
-  };
+  return { passedCount, totalCount, compileError, results };
 }
-
-export const SUPPORTED_LANGUAGES = Object.keys(LANGUAGE_MAP);

@@ -3,6 +3,7 @@ import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase'; // adjust path to your firebase config
 import { fetchQuestionsForCommittee, fetchQuestionsByIds } from '../utils/fetchQuestion'; // adjust path
 import { useNavigate, useLocation, useParams } from 'react-router-dom'; // adjust if different routing
+import CodingQuestion from './CodingQuestion'; // adjust path if needed
 
 const TestPanel = () => {
   const navigate = useNavigate();
@@ -20,7 +21,7 @@ const TestPanel = () => {
   const [autoSubmitted, setAutoSubmitted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // ① anti-cheat state
+  // anti-cheat state
   const [tabWarningCount, setTabWarningCount] = useState(0);
   const [showTabWarning, setShowTabWarning] = useState(false);
   const [warningCountdown, setWarningCountdown] = useState(10);
@@ -141,7 +142,7 @@ const TestPanel = () => {
           status: 'submitted',
           submittedAt: serverTimestamp(),
           autoSubmitted: isAuto,
-          autoSubmitReason: isAuto ? reason : null, // ② record why, e.g. 'tab_switch'
+          autoSubmitReason: isAuto ? reason : null,
         },
         { merge: true }
       );
@@ -162,7 +163,9 @@ const TestPanel = () => {
     return val !== undefined && val !== '';
   };
 
-  // ③ Disable copy / cut / paste / right-click context menu across the whole test panel
+  // Disable copy / cut / paste / right-click context menu across the whole test panel.
+  // NOTE: this also blocks pasting into the CodingQuestion editor — intentional if
+  // that's meant to stop pasting solutions in, but flagging in case that's too strict.
   useEffect(() => {
     if (loading || autoSubmitted) return;
 
@@ -181,7 +184,7 @@ const TestPanel = () => {
     };
   }, [loading, autoSubmitted]);
 
-  // ④ Block common DevTools / view-source shortcuts
+  // Block common DevTools / view-source shortcuts
   useEffect(() => {
     if (loading || autoSubmitted) return;
 
@@ -190,11 +193,11 @@ const TestPanel = () => {
 
       const isF12 = key === 'F12';
       const isDevToolsCombo =
-        (e.ctrlKey || e.metaKey) && e.shiftKey && ['I', 'J', 'C'].includes(key); // Ctrl+Shift+I/J/C
-      const isViewSource = (e.ctrlKey || e.metaKey) && key === 'U'; // Ctrl+U
-      const isSaveOrPrint = (e.ctrlKey || e.metaKey) && ['S', 'P'].includes(key); // Ctrl+S / Ctrl+P
+        (e.ctrlKey || e.metaKey) && e.shiftKey && ['I', 'J', 'C'].includes(key);
+      const isViewSource = (e.ctrlKey || e.metaKey) && key === 'U';
+      const isSaveOrPrint = (e.ctrlKey || e.metaKey) && ['S', 'P'].includes(key);
       const isScreenshotCombo =
-        (e.ctrlKey || e.metaKey) && e.shiftKey && key === 'S'; // Ctrl+Shift+S (Windows Snip)
+        (e.ctrlKey || e.metaKey) && e.shiftKey && key === 'S';
 
       if (isF12 || isDevToolsCombo || isViewSource || isSaveOrPrint || isScreenshotCombo) {
         e.preventDefault();
@@ -206,9 +209,7 @@ const TestPanel = () => {
     return () => document.removeEventListener('keydown', blockKeys, true);
   }, [loading, autoSubmitted]);
 
-  // ⑤ Tab-switch / window-blur detection: warn, and if it happens again within
-  //    10s of the warning showing, auto-submit. Closing the warning without a
-  //    second switch just resets the counter for the next offense.
+  // Tab-switch / window-blur detection
   useEffect(() => {
     if (loading || autoSubmitted) return;
 
@@ -218,10 +219,8 @@ const TestPanel = () => {
           const next = prev + 1;
 
           if (next >= 2) {
-            // second offense — auto-submit immediately, no more warnings
             handleSubmit(true, 'tab_switch');
           } else {
-            // first offense — show warning, start 10s watch window
             setShowTabWarning(true);
             setWarningCountdown(10);
           }
@@ -234,7 +233,7 @@ const TestPanel = () => {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [loading, autoSubmitted]);
 
-  // ⑥ Countdown for the warning modal — auto-dismiss after 10s if no repeat offense
+  // Countdown for the warning modal
   useEffect(() => {
     if (!showTabWarning) return;
 
@@ -271,10 +270,9 @@ const TestPanel = () => {
 
   return (
     <div
-      className="min-h-screen bg-neutral-900 text-white p-4 select-none" // ⑦ select-none discourages text selection for copying
-      onDragStart={(e) => e.preventDefault()} // ⑧ blocks dragging text/images out
+      className="min-h-screen bg-neutral-900 text-white p-4 select-none"
+      onDragStart={(e) => e.preventDefault()}
     >
-      {/* ⑨ tab-switch warning overlay */}
       {showTabWarning && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-red-900 border-2 border-red-500 rounded-lg p-6 max-w-sm text-center">
@@ -290,7 +288,7 @@ const TestPanel = () => {
         </div>
       )}
 
-      <div className="max-w-2xl mx-auto">
+      <div className={q?.type === 'coding' ? 'max-w-5xl mx-auto' : 'max-w-2xl mx-auto'}>
         <div className="mb-6 flex justify-between items-center">
           <div>
             <h1 className="text-xl font-bold">{test?.title || 'Test'}</h1>
@@ -344,37 +342,47 @@ const TestPanel = () => {
                 <span className="text-gray-500 text-sm ml-2">({q.marks} marks)</span>
               </p>
 
-              {q.category === 'code_analysis' ? (
-                <pre className="font-mono text-sm bg-gray-900 rounded-lg p-4 mb-4 whitespace-pre-wrap overflow-x-auto">
-                  {q.questionText}
-                </pre>
-              ) : (
-                <p className="mb-4 whitespace-pre-wrap">{q.questionText}</p>
-              )}
-
-              {q.type === 'mcq' ? (
-                <div className="space-y-2">
-                  {q.options.map((option, i) => (
-                    <label key={i} className="flex items-center gap-2 bg-gray-700 rounded-lg px-3 py-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name={q.id}
-                        value={option}
-                        checked={answers[q.id] === option}
-                        onChange={() => handleAnswerChange(q.id, option)}
-                      />
-                      {option}
-                    </label>
-                  ))}
-                </div>
-              ) : (
-                <textarea
-                  value={answers[q.id] || ''}
-                  onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                  rows={5}
-                  className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-gray-400"
-                  placeholder="Type your answer here"
+              {q.type === 'coding' ? (
+                <CodingQuestion
+                  question={q}
+                  value={answers[q.id]}
+                  onChange={(code) => handleAnswerChange(q.id, code)}
                 />
+              ) : (
+                <>
+                  {q.category === 'code_analysis' ? (
+                    <pre className="font-mono text-sm bg-gray-900 rounded-lg p-4 mb-4 whitespace-pre-wrap overflow-x-auto">
+                      {q.questionText}
+                    </pre>
+                  ) : (
+                    <p className="mb-4 whitespace-pre-wrap">{q.questionText}</p>
+                  )}
+
+                  {q.type === 'mcq' ? (
+                    <div className="space-y-2">
+                      {q.options.map((option, i) => (
+                        <label key={i} className="flex items-center gap-2 bg-gray-700 rounded-lg px-3 py-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={q.id}
+                            value={option}
+                            checked={answers[q.id] === option}
+                            onChange={() => handleAnswerChange(q.id, option)}
+                          />
+                          {option}
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <textarea
+                      value={answers[q.id] || ''}
+                      onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                      rows={5}
+                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                      placeholder="Type your answer here"
+                    />
+                  )}
+                </>
               )}
             </div>
 

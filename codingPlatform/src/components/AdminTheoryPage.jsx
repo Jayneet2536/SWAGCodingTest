@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { collection, getDocs, query, where, doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase'; // adjust path to your firebase config
 import { fetchQuestionsByIds } from '../utils/fetchQuestion'; // adjust path
+import { runAgainstTestCases } from '../utils/runCode'; // adjust path
 
 const AdminGradeTheory = () => {
   const [tests, setTests] = useState([]);
   const [selectedTestId, setSelectedTestId] = useState('');
-  const [attempts, setAttempts] = useState([]); // each: { id, data, theoryQuestions, marksInput, saving, saved }
+  const [attempts, setAttempts] = useState([]); // each: { id, data, theoryQuestions, codingResults, marksInput, saving, saved }
   const [loading, setLoading] = useState(false);
+  const [gradingCoding, setGradingCoding] = useState(false);
   const [error, setError] = useState('');
 
   // Load list of tests for the dropdown
@@ -46,6 +48,7 @@ const AdminGradeTheory = () => {
             const data = d.data();
             const allQuestions = await fetchQuestionsByIds(data.questionOrder || []);
             const theoryQuestions = allQuestions.filter((q) => q.type === 'theory');
+            const codingQuestions = allQuestions.filter((q) => q.type === 'coding');
 
             // Pre-fill marks input with previously saved marks, if any
             const marksInput = {};
@@ -66,10 +69,28 @@ const AdminGradeTheory = () => {
               });
             }
 
+            // Coding questions are auto-graded against test cases (not typed by hand
+            // like theory marks). Use cached results if this attempt was already
+            // graded before; otherwise leave ungraded until admin clicks "Run Test Cases" —
+            // we don't want to hit Piston for every attempt just from opening the page.
+            const codingResults = codingQuestions.map((q) => {
+              const cached = data.codingResults?.[q.id];
+              return {
+                question: q,
+                code: data.answers?.[q.id] || '',
+                graded: !!cached,
+                passed: cached?.passed ?? null,
+                total: cached?.total ?? (q.testCases || []).length,
+                marksAwarded: cached?.marksAwarded ?? null,
+                compileError: cached?.compileError ?? null,
+              };
+            });
+
             return {
               id: d.id,
               data,
               theoryQuestions,
+              codingResults,
               marksInput,
               mcqScore,
               mcqTotal,
@@ -101,15 +122,68 @@ const AdminGradeTheory = () => {
     );
   };
 
+  // Runs each coding submission in this attempt against its test cases and
+  // computes marks proportionally: (passed / total) * question.marks, floored.
+  // Compile errors score 0.
+  const handleGradeCoding = async (attemptIdx) => {
+    const attempt = attempts[attemptIdx];
+    if (attempt.codingResults.length === 0) return;
+
+    setGradingCoding(true);
+    try {
+      const graded = await Promise.all(
+        attempt.codingResults.map(async (cr) => {
+          if (!cr.code) {
+            return { ...cr, graded: true, passed: 0, marksAwarded: 0 };
+          }
+          const result = await runAgainstTestCases(
+            cr.code,
+            cr.question.language,
+            cr.question.testCases || []
+          );
+          const total = (cr.question.testCases || []).length;
+          const passed = result.passedCount ?? 0;
+          const marksAwarded = result.compileError
+            ? 0
+            : Math.floor((passed / total) * cr.question.marks);
+
+          return {
+            ...cr,
+            graded: true,
+            passed,
+            total,
+            marksAwarded,
+            compileError: result.compileError || null,
+          };
+        })
+      );
+
+      setAttempts((prev) =>
+        prev.map((a, i) => (i === attemptIdx ? { ...a, codingResults: graded, saved: false } : a))
+      );
+    } catch (err) {
+      console.error('Error grading coding questions:', err);
+      alert('Failed to grade coding questions. Please try again.');
+    }
+    setGradingCoding(false);
+  };
+
   const handleSaveGrade = async (attemptIdx) => {
     const attempt = attempts[attemptIdx];
 
     // Require every theory question to have a mark entered before saving
-    const incomplete = attempt.theoryQuestions.some(
+    const incompleteTheory = attempt.theoryQuestions.some(
       (q) => attempt.marksInput[q.id] === '' || attempt.marksInput[q.id] === undefined
     );
-    if (incomplete) {
+    if (incompleteTheory) {
       alert('Please enter marks for all theory questions before saving.');
+      return;
+    }
+
+    // Require coding questions to be graded (test cases run) before saving
+    const incompleteCoding = attempt.codingResults.some((cr) => !cr.graded);
+    if (incompleteCoding) {
+      alert('Please run test cases for all coding questions before saving.');
       return;
     }
 
@@ -120,7 +194,21 @@ const AdminGradeTheory = () => {
         (sum, v) => sum + Number(v || 0),
         0
       );
-      const finalScore = (attempt.mcqScore || 0) + theoryScore;
+      const codingScore = attempt.codingResults.reduce(
+        (sum, cr) => sum + (cr.marksAwarded || 0),
+        0
+      );
+      const finalScore = (attempt.mcqScore || 0) + theoryScore + codingScore;
+
+      const codingResultsToSave = {};
+      attempt.codingResults.forEach((cr) => {
+        codingResultsToSave[cr.question.id] = {
+          passed: cr.passed,
+          total: cr.total,
+          marksAwarded: cr.marksAwarded,
+          compileError: cr.compileError,
+        };
+      });
 
       const attemptRef = doc(db, 'testAttempts', attempt.id);
       await setDoc(
@@ -130,6 +218,8 @@ const AdminGradeTheory = () => {
           theoryScore,
           mcqScore: attempt.mcqScore,
           mcqTotal: attempt.mcqTotal,
+          codingResults: codingResultsToSave,
+          codingScore,
           finalScore,
           status: 'graded',
           gradedAt: new Date().toISOString(),
@@ -150,7 +240,7 @@ const AdminGradeTheory = () => {
   return (
     <div className="min-h-screen bg-neutral-900 text-white p-4">
       <div className="max-w-3xl mx-auto">
-        <h2 className="text-2xl font-bold mb-4">Grade Theory Answers</h2>
+        <h2 className="text-2xl font-bold mb-4">Grade Submissions</h2>
 
         <div className="mb-6">
           <label className="block text-sm font-medium mb-2">Select Test</label>
@@ -182,33 +272,93 @@ const AdminGradeTheory = () => {
                 <p className="font-semibold">{attempt.data.registrationNumber}</p>
                 <p className="text-sm text-gray-400">
                   MCQ: {attempt.mcqScore} / {attempt.mcqTotal}
+                  {attempt.codingResults.length > 0 && (
+                    <>
+                      {' · Coding: '}
+                      {attempt.codingResults.every((cr) => cr.graded)
+                        ? attempt.codingResults.reduce((s, cr) => s + (cr.marksAwarded || 0), 0)
+                        : 'not graded'}
+                      {' / '}
+                      {attempt.codingResults.reduce((s, cr) => s + cr.question.marks, 0)}
+                    </>
+                  )}
                 </p>
               </div>
               {attempt.saved && <span className="text-green-400 text-sm">Graded</span>}
             </div>
 
-            {attempt.theoryQuestions.length === 0 ? (
-              <p className="text-gray-500 text-sm">No theory questions in this attempt.</p>
-            ) : (
-              attempt.theoryQuestions.map((q) => (
-                <div key={q.id} className="mb-3 bg-gray-700 rounded-lg p-3">
-                  <p className="text-sm font-medium mb-1">{q.questionText}</p>
-                  <p className="text-sm text-gray-300 whitespace-pre-wrap mb-2">
-                    {attempt.data.answers?.[q.id] || 'Not answered'}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      max={q.marks}
-                      value={attempt.marksInput[q.id]}
-                      onChange={(e) => handleMarkChange(idx, q.id, e.target.value, q.marks)}
-                      className="w-20 bg-gray-600 rounded-lg px-2 py-1 text-sm"
-                    />
-                    <span className="text-sm text-gray-400">/ {q.marks} marks</span>
+            {attempt.theoryQuestions.length === 0 && attempt.codingResults.length === 0 && (
+              <p className="text-gray-500 text-sm">No theory or coding questions in this attempt.</p>
+            )}
+
+            {/* Theory questions - manual marking (unchanged from before) */}
+            {attempt.theoryQuestions.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Theory</p>
+                {attempt.theoryQuestions.map((q) => (
+                  <div key={q.id} className="mb-3 bg-gray-700 rounded-lg p-3">
+                    <p className="text-sm font-medium mb-1">{q.questionText}</p>
+                    <p className="text-sm text-gray-300 whitespace-pre-wrap mb-2">
+                      {attempt.data.answers?.[q.id] || 'Not answered'}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max={q.marks}
+                        value={attempt.marksInput[q.id]}
+                        onChange={(e) => handleMarkChange(idx, q.id, e.target.value, q.marks)}
+                        className="w-20 bg-gray-600 rounded-lg px-2 py-1 text-sm"
+                      />
+                      <span className="text-sm text-gray-400">/ {q.marks} marks</span>
+                    </div>
                   </div>
+                ))}
+              </div>
+            )}
+
+            {/* Coding questions - auto-graded against test cases */}
+            {attempt.codingResults.length > 0 && (
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Coding</p>
+                  <button
+                    onClick={() => handleGradeCoding(idx)}
+                    disabled={gradingCoding}
+                    className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-50"
+                  >
+                    {gradingCoding ? 'Running...' : 'Run Test Cases'}
+                  </button>
                 </div>
-              ))
+                {attempt.codingResults.map((cr) => (
+                  <div key={cr.question.id} className="mb-3 bg-gray-700 rounded-lg p-3">
+                    <p className="text-sm font-medium mb-1">{cr.question.questionText}</p>
+                    <pre className="text-xs text-gray-300 bg-gray-900 rounded p-2 whitespace-pre-wrap mb-2 max-h-40 overflow-y-auto">
+                      {cr.code || 'Not answered'}
+                    </pre>
+                    {!cr.graded && (
+                      <p className="text-sm text-gray-500">
+                        Not graded yet — click "Run Test Cases" above.
+                      </p>
+                    )}
+                    {cr.graded && cr.compileError && (
+                      <div>
+                        <p className="text-red-400 text-sm font-semibold mb-1">Compile Error</p>
+                        <pre className="text-red-300 text-xs whitespace-pre-wrap">{cr.compileError}</pre>
+                        <p className="text-sm text-gray-400 mt-1">0 / {cr.question.marks} marks</p>
+                      </div>
+                    )}
+                    {cr.graded && !cr.compileError && (
+                      <p className="text-sm text-gray-300">
+                        Passed {cr.passed} / {cr.total} test cases —{' '}
+                        <span className="font-medium">
+                          {cr.marksAwarded} / {cr.question.marks} marks
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
 
             <button
