@@ -52,17 +52,21 @@ const ResultPage = () => {
 
   // ② Student view: confirmation only, no score/answers shown
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-neutral-900 text-white p-4 gap-4">
-      <h1 className="text-2xl font-bold">Test Submitted</h1>
-      <p className="text-gray-400 text-center max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-neutral-900 text-white p-4">
+      <div className="w-full max-w-xl bg-gray-800 rounded-2xl p-8 sm:p-10 text-center">
+      <div className="w-14 h-14 mx-auto mb-6 rounded-full bg-green-500/15 border border-green-400/25 flex items-center justify-center text-2xl text-green-300">✓</div>
+      <p className="text-blue-300 text-sm font-medium tracking-wide mb-2">SUBMISSION RECEIVED</p>
+      <h1 className="text-3xl font-semibold tracking-tight">Test submitted</h1>
+      <p className="text-gray-400 text-center max-w-md mx-auto mt-3 leading-relaxed">
         Your responses for {test?.title || 'this test'} have been recorded. Results will be announced by the admin.
       </p>
       <button
         onClick={() => navigate('/dashboard', { replace: true, state: { student } })}
-        className="bg-indigo-600 hover:bg-indigo-700 px-6 py-2 rounded-lg font-medium transition-colors"
+        className="bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded-lg font-medium transition-colors mt-8"
       >
         Back to Dashboard
       </button>
+      </div>
     </div>
   );
 };

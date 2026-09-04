@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase'; // adjust path to your firebase config
 import { useNavigate, useLocation } from 'react-router-dom'; // adjust if using different routing
+import BrandHeader from './BrandHeader';
 
 const StudentDashboard = () => {
   const navigate = useNavigate();
@@ -138,9 +139,9 @@ const StudentDashboard = () => {
     : committee.charAt(0).toUpperCase() + committee.slice(1);
 
   const TestCard = ({ test }) => (
-    <div className="bg-gray-800 rounded-lg p-4 mb-3 flex justify-between items-center">
-      <div>
-        <h3 className="font-semibold text-lg">{test.title}</h3>
+    <div className="bg-gray-800 rounded-lg p-5 mb-3 flex flex-col sm:flex-row gap-4 justify-between sm:items-center transition-transform duration-200 hover:-translate-y-0.5">
+      <div className="min-w-0">
+        <h3 className="font-semibold text-lg tracking-tight">{test.title}</h3>
         <p className="text-gray-400 text-sm">
           {formatTime(test.startTime)} — {formatTime(test.endTime)}
         </p>
@@ -149,7 +150,7 @@ const StudentDashboard = () => {
       <button
         onClick={() => handleAction(test)}
         disabled={test.disabled}
-        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+        className={`px-4 py-2 rounded-lg font-medium transition-all shrink-0 ${
           test.disabled
             ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
             : 'bg-indigo-600 hover:bg-indigo-700 text-white'
@@ -169,18 +170,23 @@ const StudentDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-white p-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold">{student?.name}</h1>
-          <p className="text-gray-400">{student?.registrationNumber}</p>
-          <p className="text-gray-400">Committee: {committeeLabel}</p>
+    <div className="min-h-screen bg-neutral-900 text-white px-4 py-6 sm:p-8">
+      <BrandHeader title="Student Assessment Portal" meta="Your tests, progress, and results" />
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-10 bg-gray-800 rounded-2xl p-6 sm:p-8 relative overflow-hidden">
+          <div className="absolute -right-12 -top-16 w-48 h-48 rounded-full bg-blue-500/10 blur-3xl" />
+          <p className="text-blue-300 text-sm font-medium mb-2">STUDENT PORTAL</p>
+          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">Welcome back, {student?.name?.split(' ')[0] || 'Student'}.</h1>
+          <div className="mt-5 flex flex-wrap gap-2 text-sm">
+            <span className="bg-gray-700 px-3 py-1.5 rounded-full">{student?.registrationNumber}</span>
+            <span className="bg-gray-700 px-3 py-1.5 rounded-full">{committeeLabel} Committee</span>
+          </div>
         </div>
 
         {error && <p className="text-red-400 mb-4">{error}</p>}
 
         <section className="mb-8">
-          <h2 className="text-xl font-semibold mb-3">Upcoming Tests</h2>
+          <div className="flex items-center justify-between mb-3"><h2 className="text-xl font-semibold tracking-tight">Available tests</h2><span className="text-xs text-gray-400">Live schedule</span></div>
           {upcomingTests.length === 0 ? (
             <p className="text-gray-500">No upcoming tests.</p>
           ) : (
@@ -189,7 +195,7 @@ const StudentDashboard = () => {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold mb-3">Previous Tests</h2>
+          <div className="flex items-center justify-between mb-3"><h2 className="text-xl font-semibold tracking-tight">Test history</h2><span className="text-xs text-gray-400">Submitted & in progress</span></div>
           {previousTests.length === 0 ? (
             <p className="text-gray-500">No previous tests.</p>
           ) : (

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase'; // adjust path to your firebase config
+import AdminLayout from './AdminLayout';
 
 const COMMITTEE_OPTIONS = ['web', 'app', 'graphics'];
 
@@ -89,9 +90,8 @@ const AddStudent = () => {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-white p-4">
-      <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-5">
-        <h2 className="text-2xl font-bold mb-4">Add Student</h2>
+    <AdminLayout title="Add a student" description="Grant a student access to the assessment portal.">
+      <form onSubmit={handleSubmit} className="admin-form max-w-md mx-auto space-y-5">
 
         {errors.general && <p className="text-red-400 text-sm">{errors.general}</p>}
         {successMsg && <p className="text-green-400 text-sm">{successMsg}</p>}
@@ -162,7 +162,7 @@ const AddStudent = () => {
           {loading ? 'Adding...' : 'Add Student'}
         </button>
       </form>
-    </div>
+    </AdminLayout>
   );
 };
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { collection, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase'; // adjust path to your firebase config
+import AdminLayout from './AdminLayout';
 
 const AdminCreateTest = () => {
   const [title, setTitle] = useState('');
@@ -66,9 +67,8 @@ const AdminCreateTest = () => {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-white p-4">
-      <form onSubmit={handleSubmit} className="max-w-xl mx-auto space-y-5">
-        <h2 className="text-2xl font-bold mb-4">Create Test</h2>
+    <AdminLayout title="Create an assessment" description="Set the assessment window and the time available to students.">
+      <form onSubmit={handleSubmit} className="admin-form max-w-xl mx-auto space-y-5">
 
         {errors.general && <p className="text-red-400 text-sm">{errors.general}</p>}
         {successMsg && <p className="text-green-400 text-sm">{successMsg}</p>}
@@ -131,7 +131,7 @@ const AdminCreateTest = () => {
           {loading ? 'Creating...' : 'Create Test'}
         </button>
       </form>
-    </div>
+    </AdminLayout>
   );
 };
 

@@ -3,6 +3,7 @@ import { collection, getDocs, query, where, doc, setDoc } from 'firebase/firesto
 import { db } from '../firebase'; // adjust path to your firebase config
 import { fetchQuestionsByIds } from '../utils/fetchQuestion'; // adjust path
 import { runAgainstTestCases } from '../utils/runCode'; // adjust path
+import AdminLayout from './AdminLayout';
 
 const AdminGradeTheory = () => {
   const [tests, setTests] = useState([]);
@@ -238,9 +239,8 @@ const AdminGradeTheory = () => {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-white p-4">
-      <div className="max-w-3xl mx-auto">
-        <h2 className="text-2xl font-bold mb-4">Grade Submissions</h2>
+    <AdminLayout title="Grade submissions" description="Review theory responses and verify coding solutions." wide>
+      <div className="admin-grading max-w-3xl mx-auto">
 
         <div className="mb-6">
           <label className="block text-sm font-medium mb-2">Select Test</label>
@@ -371,7 +371,7 @@ const AdminGradeTheory = () => {
           </div>
         ))}
       </div>
-    </div>
+    </AdminLayout>
   );
 };
 

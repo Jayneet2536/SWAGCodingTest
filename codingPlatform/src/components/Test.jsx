@@ -5,6 +5,8 @@ import { fetchQuestionsForCommittee, fetchQuestionsByIds } from '../utils/fetchQ
 import { useNavigate, useLocation, useParams } from 'react-router-dom'; // adjust if different routing
 import CodingQuestion from './CodingQuestion'; // adjust path if needed
 
+const brandAsset = (fileName) => `${import.meta.env.BASE_URL}${fileName}`;
+
 const TestPanel = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -310,18 +312,22 @@ const TestPanel = () => {
         </div>
       )}
 
-      <div className={q?.type === 'coding' ? 'max-w-5xl mx-auto' : 'max-w-2xl mx-auto'}>
-        <div className="mb-6 flex justify-between items-center">
-          <div>
-            <h1 className="text-xl font-bold">{test?.title || 'Test'}</h1>
-            <p className="text-gray-400 text-sm">{student?.name} — {student?.registrationNumber}</p>
+      <div className="max-w-6xl mx-auto">
+        <header className="mb-6 bg-gray-800 rounded-lg px-4 py-3 sm:px-5 flex flex-wrap justify-between items-center gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <img src={brandAsset('swag-dev-club.jpeg')} alt="SWAG Dev's Club" className="w-12 h-12 object-contain filter invert mix-blend-screen" />
+            <div className="min-w-0">
+              <p className="text-xs text-indigo-300 font-semibold tracking-wider uppercase mb-0.5">Active assessment</p>
+              <h1 className="text-lg font-bold truncate">{test?.title || 'Test'}</h1>
+              <p className="text-gray-400 text-sm truncate">{student?.name} <span className="text-gray-600 mx-1">•</span> {student?.registrationNumber}</p>
+            </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 ml-auto">
             <span
-              className={`font-mono text-lg px-3 py-1 rounded-lg ${
+              className={`font-mono text-xl font-semibold tracking-wide px-3 py-2 rounded-lg border ${
                 timeLeft !== null && timeLeft <= 60
-                  ? 'bg-red-900 text-red-300'
-                  : 'bg-gray-800 text-gray-200'
+                  ? 'bg-red-900 text-red-300 border-red-700'
+                  : 'bg-gray-900 text-gray-100 border-gray-700'
               }`}
             >
               {formatTimeLeft(timeLeft)}
@@ -329,40 +335,54 @@ const TestPanel = () => {
             <button
               onClick={() => handleSubmit(false)}
               disabled={submitting}
-              className="bg-indigo-600 hover:bg-indigo-700 px-5 py-2 rounded-lg font-medium disabled:opacity-50"
+              className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2.5 rounded-lg font-medium disabled:opacity-50"
             >
               {submitting ? 'Submitting...' : 'Submit Test'}
             </button>
+            <img src={brandAsset('gdg.png')} alt="GDG exam partner" className="hidden sm:block w-20 h-9 object-contain" />
           </div>
-        </div>
+        </header>
 
         {questions.length === 0 ? (
           <p className="text-gray-500">No questions found for your committee.</p>
         ) : (
           <>
-            <div className="flex flex-wrap gap-2 mb-4">
-              {questions.map((qq, i) => (
-                <button
-                  key={qq.id}
-                  onClick={() => goTo(i)}
-                  className={`w-9 h-9 rounded-lg text-sm font-medium flex items-center justify-center transition-colors ${
-                    i === currentIndex
-                      ? 'bg-indigo-600 text-white'
-                      : isAnswered(qq)
-                      ? 'bg-green-800 text-green-200'
-                      : 'bg-gray-800 text-gray-400'
-                  }`}
-                >
-                  {i + 1}
-                </button>
-              ))}
-            </div>
+            <div className="lg:grid lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-5">
+              <aside className="bg-gray-800 rounded-lg p-4 mb-4 lg:mb-0 lg:self-start lg:sticky lg:top-4">
+                <div className="flex justify-between items-center mb-3">
+                  <p className="text-sm font-semibold">Questions</p>
+                  <span className="text-xs text-gray-400">{questions.filter(isAnswered).length}/{questions.length} answered</span>
+                </div>
+                <div className="grid grid-cols-5 lg:grid-cols-4 gap-2">
+                  {questions.map((qq, i) => (
+                    <button
+                      key={qq.id}
+                      onClick={() => goTo(i)}
+                      aria-label={`Go to question ${i + 1}`}
+                      className={`h-9 rounded-lg text-sm font-medium flex items-center justify-center transition-colors ${
+                        i === currentIndex
+                          ? 'bg-indigo-600 text-white'
+                          : isAnswered(qq)
+                          ? 'bg-green-800 text-green-200'
+                          : 'bg-gray-900 text-gray-400 hover:bg-gray-700'
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4 pt-3 border-t border-gray-700 text-xs text-gray-500 space-y-1">
+                  <p><span className="inline-block w-2 h-2 rounded-full bg-indigo-500 mr-2" />Current question</p>
+                  <p><span className="inline-block w-2 h-2 rounded-full bg-green-600 mr-2" />Answered</p>
+                </div>
+              </aside>
 
-            <div className="bg-gray-800 rounded-lg p-4 mb-4">
-              <p className="font-medium mb-3">
-                Question {currentIndex + 1} of {questions.length}
-                <span className="text-gray-500 text-sm ml-2">({q.marks} marks)</span>
-              </p>
+              <section>
+              <div className="bg-gray-800 rounded-lg p-5 sm:p-6 mb-4 min-h-80">
+                <div className="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-700">
+                  <p className="font-semibold text-lg">Question {currentIndex + 1}<span className="text-gray-500 text-sm font-normal ml-2">of {questions.length}</span></p>
+                  <span className="text-xs font-semibold text-indigo-300 bg-indigo-950 px-2.5 py-1 rounded">{q.marks} {q.marks === 1 ? 'MARK' : 'MARKS'}</span>
+                </div>
 
               {q.type === 'coding' ? (
                 <CodingQuestion
@@ -377,13 +397,13 @@ const TestPanel = () => {
                       {q.questionText}
                     </pre>
                   ) : (
-                    <p className="mb-4 whitespace-pre-wrap">{q.questionText}</p>
+                    <p className="mb-6 whitespace-pre-wrap leading-7 text-gray-100">{q.questionText}</p>
                   )}
 
                   {q.type === 'mcq' ? (
                     <div className="space-y-2">
                       {q.options.map((option, i) => (
-                        <label key={i} className="flex items-center gap-2 bg-gray-700 rounded-lg px-3 py-2 cursor-pointer">
+                        <label key={i} className={`flex items-center gap-3 border rounded-lg px-4 py-3 cursor-pointer transition-colors ${answers[q.id] === option ? 'bg-indigo-950 border-indigo-600' : 'bg-gray-900 border-gray-700 hover:border-gray-500'}`}>
                           <input
                             type="radio"
                             name={q.id}
@@ -400,15 +420,15 @@ const TestPanel = () => {
                       value={answers[q.id] || ''}
                       onChange={(e) => handleAnswerChange(q.id, e.target.value)}
                       rows={5}
-                      className="w-full bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                      className="w-full bg-gray-900 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-gray-400"
                       placeholder="Type your answer here"
                     />
                   )}
                 </>
               )}
-            </div>
+              </div>
 
-            <div className="flex justify-between items-center mt-4">
+              <div className="flex justify-between items-center mt-4">
               <button
                 onClick={goPrev}
                 disabled={currentIndex === 0}
@@ -433,6 +453,8 @@ const TestPanel = () => {
                   Next
                 </button>
               )}
+              </div>
+              </section>
             </div>
           </>
         )}

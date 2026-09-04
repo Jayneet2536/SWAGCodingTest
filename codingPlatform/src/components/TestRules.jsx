@@ -1,4 +1,5 @@
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
+import BrandHeader from './BrandHeader';
 
 const TestRules = () => {
   const navigate = useNavigate();
@@ -35,10 +36,12 @@ const TestRules = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-neutral-900 text-white p-4">
-      <div className="max-w-lg bg-gray-800 border border-red-700 rounded-lg p-6">
-        <h1 className="text-xl font-bold mb-4">Before you start: {test?.title || 'Test'}</h1>
-        <p className="text-gray-400 text-sm mb-4">{student?.name} — {student?.registrationNumber}</p>
+    <div className="min-h-screen bg-neutral-900 text-white p-4">
+      <BrandHeader title={test?.title || 'Online Assessment'} meta="Secure exam check-in" />
+      <div className="max-w-xl bg-gray-800 rounded-2xl p-6 sm:p-8 mx-auto mt-10">
+        <p className="text-blue-300 text-sm font-medium mb-2">EXAM CHECK-IN</p>
+        <h1 className="text-2xl font-semibold tracking-tight mb-2">Before you begin</h1>
+        <p className="text-gray-400 mb-6">{test?.title || 'Test'} · {student?.name} · {student?.registrationNumber}</p>
         <ul className="space-y-2 text-sm text-gray-200 mb-6 list-disc list-inside">
           <li>Copy, cut, paste, and right-click are disabled for the entire test.</li>
           <li>DevTools shortcuts (F12, Ctrl+Shift+I/J/C, Ctrl+U) are blocked.</li>
@@ -52,7 +55,7 @@ const TestRules = () => {
         </ul>
         <button
           onClick={handleStart}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 py-3 rounded-lg font-medium transition-colors"
+          className="w-full bg-indigo-600 hover:bg-indigo-700 py-3 rounded-lg font-medium transition-colors mt-2"
         >
           I understand — Start Test
         </button>

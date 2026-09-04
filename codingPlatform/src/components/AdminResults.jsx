@@ -3,6 +3,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { fetchQuestionsByIds } from '../utils/fetchQuestion';
 import { Link } from 'react-router-dom';
+import AdminLayout from './AdminLayout';
 
 const AdminResults = () => {
   const [rows, setRows] = useState([]);
@@ -60,10 +61,8 @@ const AdminResults = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-white p-4">
-      <div className="max-w-3xl mx-auto">
+    <AdminLayout title="Student results" description="Review submitted attempts and grading status." wide>
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Student Results</h1>
           <Link to="/admin" className="text-sm text-indigo-400 hover:text-indigo-300">
             Back to Dashboard
           </Link>
@@ -73,7 +72,7 @@ const AdminResults = () => {
         {loading && <p className="text-gray-400">Loading results...</p>}
 
         {!loading && !error && (
-          <div className="overflow-x-auto">
+          <div className="admin-table overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="text-gray-400 border-b border-gray-700">
                 <tr>
@@ -100,8 +99,7 @@ const AdminResults = () => {
             </table>
           </div>
         )}
-      </div>
-    </div>
+    </AdminLayout>
   );
 };
 

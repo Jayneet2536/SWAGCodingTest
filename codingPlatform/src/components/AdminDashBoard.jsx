@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase'; // adjust path to your firebase config
 import { Link } from 'react-router-dom'; // adjust if using different routing
+import AdminLayout from './AdminLayout';
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState({
@@ -56,6 +57,11 @@ const AdminDashboard = () => {
       desc: 'Add MCQ or Theory questions, tagged by committee',
     },
     {
+      to: '/admin/all-questions',
+      title: 'All Questions',
+      desc: 'Search, filter, and sort the complete question bank',
+    },
+    {
       to: '/admin/create-test',
       title: 'Create Test',
       desc: 'Set title, start/end window, and duration',
@@ -81,13 +87,11 @@ const AdminDashboard = () => {
   );
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-white p-4">
-      <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
+    <AdminLayout title="Dashboard" description="A live overview of your assessment programme." wide>
 
         {error && <p className="text-red-400 mb-4">{error}</p>}
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
+        <div className="admin-stat-grid grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
           <StatCard label="Registered Students" value={stats.totalStudents} />
           <StatCard label="Questions" value={stats.totalQuestions} />
           <StatCard label="Tests" value={stats.totalTests} />
@@ -100,7 +104,7 @@ const AdminDashboard = () => {
             <Link
               key={card.to}
               to={card.to}
-              className="bg-gray-800 hover:bg-gray-700 rounded-lg p-5 transition-colors relative"
+              className="admin-action-card bg-gray-800 hover:bg-gray-700 rounded-lg p-5 transition-colors relative"
             >
               {card.badge && (
                 <span className="absolute top-3 right-3 bg-red-600 text-white text-xs px-2 py-0.5 rounded-full">
@@ -112,8 +116,7 @@ const AdminDashboard = () => {
             </Link>
           ))}
         </div>
-      </div>
-    </div>
+    </AdminLayout>
   );
 };
 

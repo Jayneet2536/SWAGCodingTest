@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import SplitText from '../../reactBits/SplitText/SplitText';
 import ShinyText from '../../reactBits/ShinyText/ShinyText';
+import BrandHeader from './BrandHeader';
 
 // Admin registration numbers
 const ADMIN_REG = [
@@ -79,7 +80,7 @@ const StudentReg = () => {
         sessionStorage.setItem('regNo', regNo);
         sessionStorage.setItem('isAdmin', 'true');
 
-        navigate('/admin');
+        navigate('/admin', { replace: true });
 
         return;
       }
@@ -133,12 +134,15 @@ const StudentReg = () => {
   };
 
   return (
-    <div className="min-h-screen flex justify-center p-4 bg-neutral-900 text-white">
+    <div className="min-h-screen bg-neutral-900 text-white">
+      <BrandHeader title="Online Coding Assessment" meta="Professional computer science evaluation" />
+      <div className="flex justify-center px-4 pb-10">
 
       <div className="flex flex-col items-center w-full max-w-md">
 
         {/* SWAG TITLE */}
-        <h1 className="text-8xl md:text-8xl font-extrabold text-indigo-100 mt-14 mb-2">
+        <div className="mt-12 mb-7 text-center">
+        <h1 className="login-title font-extrabold text-indigo-100 mb-3">
 
           <SplitText
             text="SWAG"
@@ -156,6 +160,7 @@ const StudentReg = () => {
           />
 
         </h1>
+        </div>
 
         {/* FORM */}
         <div
@@ -166,21 +171,8 @@ const StudentReg = () => {
           }`}
         >
 
-          {/* LOGOS */}
-          <img
-            src="./swag.png"
-            alt="SWAG Logo"
-            className="absolute h-1/9 top-2 right-4 mb-6"
-          />
-
-          <img
-            src="./gdg.png"
-            alt="GDG Logo"
-            className="absolute w-1/8 top-2 left-2 mb-6"
-          />
-
           {/* TAGLINE */}
-          <p className="text-gray-400 text-lg font-bold text-center mb-8">
+          <p className="text-gray-400 text-lg font-bold text-center mb-6">
 
             <ShinyText
               text="Code Compete Conquer"
@@ -192,11 +184,13 @@ const StudentReg = () => {
           </p>
 
           {/* ERROR */}
-          {error && (
-            <p className="text-red-400 text-sm text-center">
-              {error}
-            </p>
-          )}
+          <div className="login-card space-y-5">
+            <p className="text-sm text-gray-500 text-center">Enter your registered college ID to continue.</p>
+            {error && (
+              <p className="text-red-400 text-sm text-center">
+                {error}
+              </p>
+            )}
 
           {/* REGISTRATION NUMBER */}
           <div>
@@ -215,7 +209,7 @@ const StudentReg = () => {
                   ? 'border-2 border-red-500'
                   : ''
               }`}
-              placeholder="e.g. 2025BCS061"
+              placeholder="e.g. 20XXBACXXX"
               autoComplete="off"
             />
 
@@ -232,11 +226,12 @@ const StudentReg = () => {
               ? 'Checking Registration...'
               : 'Login'}
           </button>
+          </div>
 
         </div>
 
       </div>
-
+      </div>
     </div>
   );
 };

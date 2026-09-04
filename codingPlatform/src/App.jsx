@@ -11,6 +11,7 @@ import AddStudent from "./components/AddStudent";
 import AdminDashboard from "./components/AdminDashBoard";
 import AdminResults from "./components/AdminResults";
 import TestRules from "./components/TestRules";
+import AdminQuestionList from "./components/AdminQuestionList";
 
 import AdminProtectedRoute from "./components/AdminProtectedRoute";
 
@@ -66,6 +67,11 @@ function App() {
           <Route
             path="/admin/questions"
             element={<AdminQuestionForm />}
+          />
+
+          <Route
+            path="/admin/all-questions"
+            element={<AdminQuestionList />}
           />
 
           <Route

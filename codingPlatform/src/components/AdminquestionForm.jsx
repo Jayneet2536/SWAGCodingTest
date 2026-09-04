@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase'; // adjust path to your firebase config
 import { SUPPORTED_LANGUAGES } from '../utils/runCode'; // adjust path
+import AdminLayout from './AdminLayout';
 
 const COMMITTEE_OPTIONS = [
   { value: 'dsa', label: 'DSA (common — shown to all committees)' },
@@ -172,9 +173,8 @@ const AdminQuestionForm = () => {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-white p-4">
-      <form onSubmit={handleSubmit} className="max-w-xl mx-auto space-y-5">
-        <h2 className="text-2xl font-bold mb-4">Add Question</h2>
+    <AdminLayout title="Add a question" description="Build a reliable question bank for each committee and skill level.">
+      <form onSubmit={handleSubmit} className="admin-form max-w-xl mx-auto space-y-5">
 
         {errors.general && <p className="text-red-400 text-sm">{errors.general}</p>}
         {successMsg && <p className="text-green-400 text-sm">{successMsg}</p>}
@@ -439,7 +439,7 @@ const AdminQuestionForm = () => {
           {loading ? 'Adding...' : 'Add Question'}
         </button>
       </form>
-    </div>
+    </AdminLayout>
   );
 };
 
