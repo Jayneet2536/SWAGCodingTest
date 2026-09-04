@@ -21,6 +21,9 @@ const TestPanel = () => {
   })();
   const student = stateData.student || storedStudent;
   const test = stateData.test; // test object is not cached — only comes via navigation state
+  // AddStudent stores this as `committee`; older records may use
+  // `preferredCommittee`. Support both without changing either data set.
+  const studentCommittee = student?.preferredCommittee || student?.committee;
 
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
@@ -56,26 +59,35 @@ const TestPanel = () => {
           return;
         }
 
-        if (attemptSnap.exists()) {
-          setAnswers(attemptSnap.data().answers || {});
-          const savedOrder = attemptSnap.data().questionOrder || [];
-          const fetchedQuestions = await fetchQuestionsByIds(savedOrder);
-          setQuestions(fetchedQuestions);
-        } else {
-          const fetchedQuestions = await fetchQuestionsForCommittee(student.preferredCommittee);
-          const questionOrder = fetchedQuestions.map((q) => q.id);
+        const savedOrder = attemptSnap.exists() ? attemptSnap.data().questionOrder || [] : [];
+        let fetchedQuestions = savedOrder.length
+          ? await fetchQuestionsByIds(savedOrder)
+          : [];
+
+        // Older attempts could contain an empty questionOrder after a failed
+        // indexed query. Generate and persist a new set so students can resume.
+        if (fetchedQuestions.length === 0) {
+          fetchedQuestions = await fetchQuestionsForCommittee(studentCommittee);
+          if (fetchedQuestions.length === 0) {
+            throw new Error('No questions are configured for this committee.');
+          }
 
           await setDoc(attemptRef, {
             registrationNumber: student.registrationNumber,
             testId,
             status: 'in_progress',
-            answers: {},
-            questionOrder,
-            startedAt: serverTimestamp(),
-          });
-
-          setQuestions(fetchedQuestions);
+            answers: attemptSnap.exists() ? attemptSnap.data().answers || {} : {},
+            questionOrder: fetchedQuestions.map((q) => q.id),
+            startedAt: attemptSnap.exists() ? attemptSnap.data().startedAt || serverTimestamp() : serverTimestamp(),
+          }, { merge: true });
         }
+
+        if (attemptSnap.exists()) {
+          setAnswers(attemptSnap.data().answers || {});
+        } else {
+          setAnswers({});
+        }
+        setQuestions(fetchedQuestions);
         const endTime = test?.endTime?.toDate
           ? test.endTime.toDate()
           : test?.endTime
@@ -88,7 +100,7 @@ const TestPanel = () => {
         }
       } catch (err) {
         console.error('Error loading test:', err);
-        setError('Failed to load test. Please try again.');
+        setError(err.message || 'Failed to load test. Please try again.');
       }
       setLoading(false);
     };

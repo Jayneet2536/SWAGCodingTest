@@ -7,7 +7,7 @@ import ShinyText from '../../reactBits/ShinyText/ShinyText';
 
 // Admin registration numbers
 const ADMIN_REG = [
-  "2025BCS063",
+  "2025BCS061",
 ];
 
 const normalizeRegNo = (regNo) => regNo.trim().toUpperCase();

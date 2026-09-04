@@ -13,17 +13,23 @@ const ResultPage = () => {
 
   // ① Confirm the attempt was actually submitted — no score is fetched or shown here.
   useEffect(() => {
+    let cancelled = false;
+
     const verifySubmission = async () => {
       if (!student || !testId) {
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
         return;
       }
       try {
         const attemptRef = doc(db, 'testAttempts', attemptId);
         const attemptSnap = await getDoc(attemptRef);
 
+        // Do not let this asynchronous check redirect after the user leaves
+        // this screen (for example, by clicking Back to Dashboard).
+        if (cancelled) return;
+
         if (!attemptSnap.exists()) {
-          navigate('/dashboard');
+          navigate('/dashboard', { replace: true, state: { student } });
           return;
         }
 
@@ -31,7 +37,7 @@ const ResultPage = () => {
 
         if (attemptData.status !== 'submitted' && attemptData.status !== 'graded') {
           // Not submitted yet — send them back to the test instead
-          navigate(`/test/${testId}`, { state: { student, test } });
+          navigate(`/test/${testId}`, { replace: true, state: { student, test } });
         }
       } catch (err) {
         console.error('Error verifying submission:', err);
@@ -39,6 +45,9 @@ const ResultPage = () => {
     };
 
     verifySubmission();
+    return () => {
+      cancelled = true;
+    };
   }, [student, testId, attemptId, navigate]);
 
   // ② Student view: confirmation only, no score/answers shown
@@ -49,7 +58,7 @@ const ResultPage = () => {
         Your responses for {test?.title || 'this test'} have been recorded. Results will be announced by the admin.
       </p>
       <button
-        onClick={() => navigate('/dashboard')}
+        onClick={() => navigate('/dashboard', { replace: true, state: { student } })}
         className="bg-indigo-600 hover:bg-indigo-700 px-6 py-2 rounded-lg font-medium transition-colors"
       >
         Back to Dashboard

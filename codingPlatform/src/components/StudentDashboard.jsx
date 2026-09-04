@@ -132,6 +132,11 @@ const StudentDashboard = () => {
   const formatTime = (date) =>
     date.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
 
+  const committee = student?.preferredCommittee || student?.committee || 'Not assigned';
+  const committeeLabel = committee === 'Not assigned'
+    ? committee
+    : committee.charAt(0).toUpperCase() + committee.slice(1);
+
   const TestCard = ({ test }) => (
     <div className="bg-gray-800 rounded-lg p-4 mb-3 flex justify-between items-center">
       <div>
@@ -169,6 +174,7 @@ const StudentDashboard = () => {
         <div className="mb-8">
           <h1 className="text-2xl font-bold">{student?.name}</h1>
           <p className="text-gray-400">{student?.registrationNumber}</p>
+          <p className="text-gray-400">Committee: {committeeLabel}</p>
         </div>
 
         {error && <p className="text-red-400 mb-4">{error}</p>}

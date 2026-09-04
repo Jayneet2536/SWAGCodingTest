@@ -30,35 +30,27 @@ const pickRandom = (pool, count, label) => {
  */
 export const fetchQuestionsForCommittee = async (preferredCommittee) => {
   try {
-    const [mcqSnap, theorySnap, codeSnap, dsaSnap] = await Promise.all([
-      getDocs(query(
-        collection(db, 'questions'),
-        where('committee', '==', preferredCommittee),
-        where('type', '==', 'mcq')
-      )),
-      getDocs(query(
-        collection(db, 'questions'),
-        where('committee', '==', preferredCommittee),
-        where('type', '==', 'theory'),
-        where('category', '==', 'theory')
-      )),
-      getDocs(query(
-        collection(db, 'questions'),
-        where('committee', '==', preferredCommittee),
-        where('type', '==', 'theory'),
-        where('category', '==', 'code_analysis')
-      )),
-      getDocs(query(
-        collection(db, 'questions'),
-        where('committee', '==', 'dsa')
-      )),
+    // Keep the Firestore query to one equality filter. Filtering the small
+    // committee pools below avoids requiring composite Firestore indexes.
+    const [committeeSnap, dsaSnap] = await Promise.all([
+      getDocs(query(collection(db, 'questions'), where('committee', '==', preferredCommittee))),
+      getDocs(query(collection(db, 'questions'), where('committee', '==', 'dsa'))),
     ]);
 
     const toList = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const committeeQuestions = toList(committeeSnap);
 
-    const mcqPicked = pickRandom(toList(mcqSnap), 10, 'MCQ');
-    const theoryPicked = pickRandom(toList(theorySnap), 5, 'theory');
-    const codePicked = pickRandom(toList(codeSnap), 5, 'code analysis');
+    const mcqPicked = pickRandom(committeeQuestions.filter((q) => q.type === 'mcq'), 10, 'MCQ');
+    const theoryPicked = pickRandom(
+      committeeQuestions.filter((q) => q.type === 'theory' && q.category === 'theory'),
+      5,
+      'theory'
+    );
+    const codePicked = pickRandom(
+      committeeQuestions.filter((q) => q.type === 'theory' && q.category === 'code_analysis'),
+      5,
+      'code analysis'
+    );
     const dsaPicked = pickRandom(toList(dsaSnap), 2, 'DSA');
 
     const combined = [...mcqPicked, ...theoryPicked, ...codePicked, ...dsaPicked];

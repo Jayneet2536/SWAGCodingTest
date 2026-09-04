@@ -6,12 +6,23 @@ const TestRules = () => {
   const { testId } = useParams();
   const { student, test } = location.state || {};
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!student || !testId) {
       navigate('/dashboard');
       return;
     }
-    // Hand off to the actual test panel, same nav-state pattern you already use
+
+    // This call is triggered directly by the student's click, which browsers
+    // require before allowing fullscreen mode.
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch (error) {
+      // Continue into the test if fullscreen is unavailable or declined.
+      console.warn('Fullscreen request was not accepted:', error);
+    }
+
     navigate(`/test/${testId}/panel`, { state: { student, test } });
   };
 

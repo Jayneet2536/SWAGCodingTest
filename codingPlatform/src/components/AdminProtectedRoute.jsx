@@ -1,7 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 
 const ADMIN_REG = [
-  "2025BCS063",
+  "2025BCS061",
 ];
 
 function AdminProtectedRoute() {
