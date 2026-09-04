@@ -29,26 +29,20 @@ const StudentReg = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Check student registration number in Firestore
-  const checkUserRegistration = async (regNo) => {
+  // Fetch the student's registered profile from Firestore.
+  // Returns the full document data (including registrationNumber) or null if not found.
+  const fetchStudentRecord = async (regNo) => {
     try {
-      const userRef = doc(
-        db,
-        'registeredUsers',
-        regNo
-      );
-
+      const userRef = doc(db, 'registeredUsers', regNo);
       const userSnap = await getDoc(userRef);
 
-      return userSnap.exists();
+      if (!userSnap.exists()) return null;
 
+      // Merge in the doc id as registrationNumber in case it isn't stored as a field.
+      return { registrationNumber: regNo, ...userSnap.data() };
     } catch (error) {
-      console.error(
-        'Error checking registration:',
-        error
-      );
-
-      return false;
+      console.error('Error checking registration:', error);
+      return null;
     }
   };
 
@@ -94,10 +88,9 @@ const StudentReg = () => {
       // STUDENT CHECK
       // ==========================================
 
-      const isRegistered =
-        await checkUserRegistration(regNo);
+      const student = await fetchStudentRecord(regNo);
 
-      if (!isRegistered) {
+      if (!student) {
         setError(
           'Registration number not found. Contact admin for access.'
         );
@@ -105,17 +98,17 @@ const StudentReg = () => {
         return;
       }
 
-      // Save student registration number
+      // Save full student profile (name, email, phone, preferredCommittee, etc.)
+      // so the dashboard can read it back after a refresh, not just the reg number.
       sessionStorage.setItem('regNo', regNo);
       sessionStorage.setItem('isAdmin', 'false');
+      sessionStorage.setItem('student', JSON.stringify(student));
 
       console.log('Student login:', regNo);
 
       // Go to student dashboard
       navigate('/dashboard', {
-        state: {
-          registrationNumber: regNo
-        }
+        state: { student }
       });
 
     } catch (error) {

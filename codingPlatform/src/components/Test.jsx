@@ -10,7 +10,17 @@ const TestPanel = () => {
   const location = useLocation();
   const { testId } = useParams();
 
-  const { student, test } = location.state || {};
+  const stateData = location.state || {};
+  const storedStudent = (() => {
+    try {
+      const raw = sessionStorage.getItem('student');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
+  const student = stateData.student || storedStudent;
+  const test = stateData.test; // test object is not cached — only comes via navigation state
 
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});

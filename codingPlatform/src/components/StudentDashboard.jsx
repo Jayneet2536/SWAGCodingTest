@@ -6,7 +6,26 @@ import { useNavigate, useLocation } from 'react-router-dom'; // adjust if using 
 const StudentDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const student = location.state?.student;
+
+  // Prefer student passed via router state; fall back to sessionStorage
+  // (handles page refresh, since location.state is lost on reload).
+  const stateStudent = location.state?.student;
+  const storedStudent = (() => {
+    try {
+      const raw = sessionStorage.getItem('student');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
+  const student = stateStudent || storedStudent;
+
+  // Keep sessionStorage in sync whenever we do have fresh state data.
+  useEffect(() => {
+    if (stateStudent) {
+      sessionStorage.setItem('student', JSON.stringify(stateStudent));
+    }
+  }, [stateStudent]);
   // student = { name, registrationNumber, email, phone, preferredCommittee }
   const [upcomingTests, setUpcomingTests] = useState([]);
   const [previousTests, setPreviousTests] = useState([]);
