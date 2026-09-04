@@ -10,6 +10,7 @@ import AddStudent from './components/AddStudent';
 import AdminDashboard from './components/AdminDashBoard';
 // adjust the above import paths to match your actual folder structure
 import AdminResults from './components/AdminResults';
+import TestRules from './components/TestRules';
 
 function App() {
   return (
@@ -18,8 +19,9 @@ function App() {
         {/* Student flow */}
         <Route path="/" element={<StudentReg />} />
         <Route path="/dashboard" element={<StudentDashboard />} />
-        <Route path="/test/:testId" element={<TestPanel />} />
         <Route path="/result/:testId" element={<ResultPage />} />
+        <Route path="/test/:testId" element={<TestRules />} />
+        <Route path="/test/:testId/panel" element={<TestPanel />} />
 
         {/* Admin flow */}
         <Route path="/admin" element={<AdminDashboard />} />

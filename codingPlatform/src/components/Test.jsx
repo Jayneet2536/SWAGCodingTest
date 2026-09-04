@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase'; // adjust path to your firebase config
 import { fetchQuestionsForCommittee, fetchQuestionsByIds } from '../utils/fetchQuestion'; // adjust path
@@ -9,17 +9,22 @@ const TestPanel = () => {
   const location = useLocation();
   const { testId } = useParams();
 
-  // student + test passed via navigate state from StudentDashboard
   const { student, test } = location.state || {};
 
   const [questions, setQuestions] = useState([]);
-  const [answers, setAnswers] = useState({}); // { questionId: answerValue }
+  const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [timeLeft, setTimeLeft] = useState(null); // seconds remaining
+  const [timeLeft, setTimeLeft] = useState(null);
   const [autoSubmitted, setAutoSubmitted] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0); // ① which question is on screen
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  // ① anti-cheat state
+  const [tabWarningCount, setTabWarningCount] = useState(0);
+  const [showTabWarning, setShowTabWarning] = useState(false);
+  const [warningCountdown, setWarningCountdown] = useState(10);
+  const warningTimerRef = useRef(null);
 
   const attemptId = student && testId ? `${student.registrationNumber}_${testId}` : null;
 
@@ -32,25 +37,20 @@ const TestPanel = () => {
       }
 
       try {
-        // Load or create the attempt doc first, to resume any saved answers
         const attemptRef = doc(db, 'testAttempts', attemptId);
         const attemptSnap = await getDoc(attemptRef);
 
         if (attemptSnap.exists() && attemptSnap.data().status === 'submitted') {
-          // Already submitted — don't allow re-entry
           navigate(`/result/${testId}`, { state: { student, test } });
           return;
         }
 
         if (attemptSnap.exists()) {
           setAnswers(attemptSnap.data().answers || {});
-
-          // Resume: reuse the exact question order saved on first load
           const savedOrder = attemptSnap.data().questionOrder || [];
           const fetchedQuestions = await fetchQuestionsByIds(savedOrder);
           setQuestions(fetchedQuestions);
         } else {
-          // First time opening this test — fetch, shuffle, and lock in the order
           const fetchedQuestions = await fetchQuestionsForCommittee(student.preferredCommittee);
           const questionOrder = fetchedQuestions.map((q) => q.id);
 
@@ -85,7 +85,6 @@ const TestPanel = () => {
     loadTest();
   }, [student, testId, attemptId, navigate, test]);
 
-  // Countdown ticker — auto-submits when it hits zero
   useEffect(() => {
     if (timeLeft === null || loading || autoSubmitted) return;
 
@@ -116,7 +115,6 @@ const TestPanel = () => {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   };
 
-  // Autosave answers periodically / on change, so "Resume" actually works
   useEffect(() => {
     if (!attemptId || loading) return;
     const saveTimer = setTimeout(async () => {
@@ -126,11 +124,11 @@ const TestPanel = () => {
       } catch (err) {
         console.error('Error autosaving answers:', err);
       }
-    }, 1500); // debounce
+    }, 1500);
     return () => clearTimeout(saveTimer);
   }, [answers, attemptId, loading]);
 
-  const handleSubmit = async (isAuto = false) => {
+  const handleSubmit = async (isAuto = false, reason = '') => {
     if (!isAuto && !window.confirm('Submit the test? You will not be able to change answers after this.')) return;
 
     setSubmitting(true);
@@ -143,6 +141,7 @@ const TestPanel = () => {
           status: 'submitted',
           submittedAt: serverTimestamp(),
           autoSubmitted: isAuto,
+          autoSubmitReason: isAuto ? reason : null, // ② record why, e.g. 'tab_switch'
         },
         { merge: true }
       );
@@ -154,7 +153,6 @@ const TestPanel = () => {
     setSubmitting(false);
   };
 
-  // ② navigation helpers
   const goNext = () => setCurrentIndex((i) => Math.min(i + 1, questions.length - 1));
   const goPrev = () => setCurrentIndex((i) => Math.max(i - 1, 0));
   const goTo = (i) => setCurrentIndex(i);
@@ -163,6 +161,94 @@ const TestPanel = () => {
     const val = answers[q.id];
     return val !== undefined && val !== '';
   };
+
+  // ③ Disable copy / cut / paste / right-click context menu across the whole test panel
+  useEffect(() => {
+    if (loading || autoSubmitted) return;
+
+    const blockEvent = (e) => e.preventDefault();
+
+    document.addEventListener('copy', blockEvent);
+    document.addEventListener('cut', blockEvent);
+    document.addEventListener('paste', blockEvent);
+    document.addEventListener('contextmenu', blockEvent);
+
+    return () => {
+      document.removeEventListener('copy', blockEvent);
+      document.removeEventListener('cut', blockEvent);
+      document.removeEventListener('paste', blockEvent);
+      document.removeEventListener('contextmenu', blockEvent);
+    };
+  }, [loading, autoSubmitted]);
+
+  // ④ Block common DevTools / view-source shortcuts
+  useEffect(() => {
+    if (loading || autoSubmitted) return;
+
+    const blockKeys = (e) => {
+      const key = e.key?.toUpperCase();
+
+      const isF12 = key === 'F12';
+      const isDevToolsCombo =
+        (e.ctrlKey || e.metaKey) && e.shiftKey && ['I', 'J', 'C'].includes(key); // Ctrl+Shift+I/J/C
+      const isViewSource = (e.ctrlKey || e.metaKey) && key === 'U'; // Ctrl+U
+      const isSaveOrPrint = (e.ctrlKey || e.metaKey) && ['S', 'P'].includes(key); // Ctrl+S / Ctrl+P
+      const isScreenshotCombo =
+        (e.ctrlKey || e.metaKey) && e.shiftKey && key === 'S'; // Ctrl+Shift+S (Windows Snip)
+
+      if (isF12 || isDevToolsCombo || isViewSource || isSaveOrPrint || isScreenshotCombo) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    document.addEventListener('keydown', blockKeys, true);
+    return () => document.removeEventListener('keydown', blockKeys, true);
+  }, [loading, autoSubmitted]);
+
+  // ⑤ Tab-switch / window-blur detection: warn, and if it happens again within
+  //    10s of the warning showing, auto-submit. Closing the warning without a
+  //    second switch just resets the counter for the next offense.
+  useEffect(() => {
+    if (loading || autoSubmitted) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setTabWarningCount((prev) => {
+          const next = prev + 1;
+
+          if (next >= 2) {
+            // second offense — auto-submit immediately, no more warnings
+            handleSubmit(true, 'tab_switch');
+          } else {
+            // first offense — show warning, start 10s watch window
+            setShowTabWarning(true);
+            setWarningCountdown(10);
+          }
+          return next;
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [loading, autoSubmitted]);
+
+  // ⑥ Countdown for the warning modal — auto-dismiss after 10s if no repeat offense
+  useEffect(() => {
+    if (!showTabWarning) return;
+
+    if (warningCountdown <= 0) {
+      setShowTabWarning(false);
+      return;
+    }
+
+    warningTimerRef.current = setTimeout(() => {
+      setWarningCountdown((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearTimeout(warningTimerRef.current);
+  }, [showTabWarning, warningCountdown]);
 
   if (loading) {
     return (
@@ -180,11 +266,30 @@ const TestPanel = () => {
     );
   }
 
-  const q = questions[currentIndex]; // ③ current question only
+  const q = questions[currentIndex];
   const isLastQuestion = currentIndex === questions.length - 1;
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-white p-4">
+    <div
+      className="min-h-screen bg-neutral-900 text-white p-4 select-none" // ⑦ select-none discourages text selection for copying
+      onDragStart={(e) => e.preventDefault()} // ⑧ blocks dragging text/images out
+    >
+      {/* ⑨ tab-switch warning overlay */}
+      {showTabWarning && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-red-900 border-2 border-red-500 rounded-lg p-6 max-w-sm text-center">
+            <h2 className="text-xl font-bold mb-2">⚠ Warning</h2>
+            <p className="mb-2">
+              You switched away from the test tab/window. This is your <strong>first warning</strong>.
+            </p>
+            <p className="text-sm text-red-200">
+              If you switch tabs again, your test will be <strong>auto-submitted immediately</strong>.
+            </p>
+            <p className="text-xs text-gray-300 mt-3">This warning closes in {warningCountdown}s</p>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-2xl mx-auto">
         <div className="mb-6 flex justify-between items-center">
           <div>
@@ -215,7 +320,6 @@ const TestPanel = () => {
           <p className="text-gray-500">No questions found for your committee.</p>
         ) : (
           <>
-            {/* ④ jump-to-question strip */}
             <div className="flex flex-wrap gap-2 mb-4">
               {questions.map((qq, i) => (
                 <button
@@ -234,12 +338,19 @@ const TestPanel = () => {
               ))}
             </div>
 
-            {/* ⑤ single question card */}
             <div className="bg-gray-800 rounded-lg p-4 mb-4">
               <p className="font-medium mb-3">
-                Question {currentIndex + 1} of {questions.length}: {q.questionText}
+                Question {currentIndex + 1} of {questions.length}
                 <span className="text-gray-500 text-sm ml-2">({q.marks} marks)</span>
               </p>
+
+              {q.category === 'code_analysis' ? (
+                <pre className="font-mono text-sm bg-gray-900 rounded-lg p-4 mb-4 whitespace-pre-wrap overflow-x-auto">
+                  {q.questionText}
+                </pre>
+              ) : (
+                <p className="mb-4 whitespace-pre-wrap">{q.questionText}</p>
+              )}
 
               {q.type === 'mcq' ? (
                 <div className="space-y-2">
@@ -267,7 +378,6 @@ const TestPanel = () => {
               )}
             </div>
 
-            {/* ⑥ previous / next controls */}
             <div className="flex justify-between items-center mt-4">
               <button
                 onClick={goPrev}
