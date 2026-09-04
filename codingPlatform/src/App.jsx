@@ -17,7 +17,7 @@ import AdminProtectedRoute from "./components/AdminProtectedRoute";
 
 function App() {
   return (
-    <BrowserRouter basename="/SWAGCodingTest">
+    <BrowserRouter>
 
       <Routes>
 
